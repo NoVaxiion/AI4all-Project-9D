@@ -381,4 +381,4 @@ elif view == "ℹ️ About":
     with col2:
         st.metric("Cities Covered", "95")
     with col3:
-        st.metric("Crime Types", "20")
+        st.metric("Crime Types", "20+")
