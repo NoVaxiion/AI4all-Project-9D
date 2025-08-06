@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
-import matplotlib.pyplot as plt
 import os
+import pickle
 from datetime import datetime, timedelta
 import plotly.express as px
-import plotly.graph_objects as go
 from tflite_utils import load_tflite_model, tflite_predict
 
 ## Helpers for model inference and data loading
@@ -42,7 +40,7 @@ def load_artifacts():
     imputer.fit(df[env_features])
     
     # Load the exact one-hot encoded columns used during training
-    import pickle
+    
     ohe_path = os.path.join(base_dir, 'ohe_columns.pkl')
     with open(ohe_path, 'rb') as f:
         ohe_columns = pickle.load(f)
