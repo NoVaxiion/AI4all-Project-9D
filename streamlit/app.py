@@ -74,8 +74,10 @@ def predict_crime(raw_input, model, le, scaler, imputer, ohe_columns, top_k=5):
 @st.cache_data
 def load_data():
     try:
-        # Load combined data from project root
-        return pd.read_csv('combined_data.csv')
+        # Load combined data from the streamlit directory
+        base_dir = os.path.dirname(__file__)
+        data_path = os.path.join(base_dir, 'combined_data.csv')
+        return pd.read_csv(data_path)
     except Exception as e:
         st.error(f"Error loading data: {e}")
         return None
