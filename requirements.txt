@@ -7,4 +7,4 @@ pandas
 matplotlib
 plotly
 tensorflow-cpu==2.13.1
-altair
+altair<5
