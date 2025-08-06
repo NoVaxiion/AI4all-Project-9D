@@ -309,7 +309,7 @@ elif view == "📊 Historical Analysis":
         filtered_data = data[data['city'].isin(selected_cities)]
         
         # Time period selection
-        years = sorted(filtered_data['year'].unique())
+        years = sorted([int(year) for year in filtered_data['year'].unique()])  # Convert numpy.int64 to int
         if len(years) > 1:
             year_range = st.slider("Select Year Range", min_value=min(years), max_value=max(years), value=(min(years), max(years)))
             filtered_data = filtered_data[(filtered_data['year'] >= year_range[0]) & (filtered_data['year'] <= year_range[1])]
