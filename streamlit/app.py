@@ -7,24 +7,27 @@ import os
 from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
+from tflite_utils import load_tflite_model, tflite_predict
 
 ## Helpers for model inference and data loading
 @st.cache_resource
 def load_artifacts():
     # Directory of this script
     base_dir = os.path.dirname(__file__)
-    # Artifact paths (skip the model for now)
+    # Artifact paths
+    model_path = os.path.join(base_dir, 'crime_prediction_model.tflite')
     le_path = os.path.join(base_dir, 'label_encoder.pkl')
     scaler_path = os.path.join(base_dir, 'scaler.pkl')
     imputer_path = os.path.join(base_dir, 'imputer.pkl')
     ohe_path = os.path.join(base_dir, 'ohe_columns.pkl')
     
-    # Load preprocessing artifacts only
+    # Load TFLite model and preprocessing artifacts
+    model = load_tflite_model(model_path)
     le = joblib.load(le_path)
     scaler = joblib.load(scaler_path)
     imputer = joblib.load(imputer_path)
     ohe_columns = joblib.load(ohe_path)
-    return None, le, scaler, imputer, ohe_columns  # Return None for model
+    return model, le, scaler, imputer, ohe_columns
 
 def preprocess_input(raw_input, imputer, scaler, ohe_columns):
     df_raw = pd.DataFrame([raw_input])
@@ -64,37 +67,41 @@ def preprocess_input(raw_input, imputer, scaler, ohe_columns):
     return [X_t, X_s, X_e]
 
 def predict_crime(raw_input, model, le, scaler, imputer, ohe_columns, top_k=5):
-    # For now, return dummy predictions based on common crime types
-    # This is a temporary workaround until we resolve the model loading issues
-    
-    common_crimes = [
-        ('Larceny/Theft Offenses', 0.25),
-        ('Assault Offenses', 0.20),
-        ('Drug/Narcotic Offenses', 0.15),
-        ('Destruction/Damage/Vandalism of Property', 0.12),
-        ('Fraud Offenses', 0.10),
-        ('Burglary/Breaking & Entering', 0.08),
-        ('Motor Vehicle Theft', 0.05),
-        ('Robbery', 0.03),
-        ('Weapon Law Violations', 0.02)
-    ]
-    
-    # Add some randomness based on input
-    np.random.seed(hash(str(raw_input)) % 2**31)
-    noise = np.random.normal(0, 0.05, len(common_crimes))
-    
-    # Apply noise and normalize
-    predictions = []
-    total_prob = 0
-    for i, (crime, base_prob) in enumerate(common_crimes[:top_k]):
-        prob = max(0.01, base_prob + noise[i])  # Ensure positive probability
-        predictions.append((crime, prob))
-        total_prob += prob
-    
-    # Normalize probabilities
-    predictions = [(crime, prob/total_prob) for crime, prob in predictions]
-    
-    return predictions
+    # Use the actual TensorFlow Lite model for predictions
+    try:
+        # Preprocess the input
+        X_inputs = preprocess_input(raw_input, imputer, scaler, ohe_columns)
+        
+        # Make prediction using TFLite model
+        predictions = tflite_predict(model, X_inputs)
+        
+        # Get top-k predictions
+        pred_probs = predictions[0]  # Assuming single sample
+        top_indices = np.argsort(pred_probs)[::-1][:top_k]
+        
+        # Convert indices back to crime type names
+        results = []
+        for idx in top_indices:
+            crime_type = le.inverse_transform([idx])[0]
+            probability = float(pred_probs[idx])
+            results.append((crime_type, probability))
+        
+        # DEBUG: Show model is working with real data
+        st.sidebar.info(f"📊 Max probability: {max(pred_probs):.3f}")
+        st.sidebar.info(f"🎯 Input city: {raw_input.get('city', 'Unknown')}")
+        st.sidebar.info(f"🕐 Input hour: {raw_input.get('hour', 'Unknown')}")
+        
+        return results
+        
+    except Exception as e:
+        st.error(f"Error making prediction: {e}")
+        st.sidebar.error("❌ Model Failed - Using Fallback")
+        # Fallback to dummy predictions if model fails
+        return [
+            ('Model Error - Using Fallback', 0.5),
+            ('Please Check Logs', 0.3),
+            ('Technical Issue', 0.2)
+        ]
 
 @st.cache_data
 def load_data():
@@ -134,8 +141,14 @@ view = st.sidebar.radio("Select View", ["🔮 Predict Crime", "📊 Historical A
 with st.spinner("Loading models and data..."):
     data = load_data()
     model, le, scaler, imputer, ohe_columns = load_artifacts()
+    
+    # Show model loading success
+    if model is not None:
+        st.sidebar.success("🤖 TensorFlow Lite Model Loaded!")
+    else:
+        st.sidebar.error("❌ Model failed to load!")
 
-if data is None or le is None:
+if data is None or model is None:
     st.error("❌ Failed to load required data or models. Please check file paths.")
     st.stop()
 
@@ -259,7 +272,10 @@ if view == "🔮 Predict Crime":
                         fig.update_traces(texttemplate='%{text:.1%}', textposition='outside')
                         fig.update_layout(
                             xaxis_title='Probability',
-                            yaxis={'categoryorder':'total ascending'}, height=400, showlegend=False
+                            xaxis=dict(tickformat='.1%'),
+                            yaxis={'categoryorder':'total ascending'}, 
+                            height=400, 
+                            showlegend=False
                         )
                         st.plotly_chart(fig, use_container_width=True)
                         with st.expander("Show full predictions"):

@@ -1,8 +1,8 @@
 import numpy as np
-import tflite_runtime.interpreter as tflite
+import tensorflow as tf
 
 def load_tflite_model(model_path):
-    interpreter = tflite.Interpreter(model_path=model_path)
+    interpreter = tf.lite.Interpreter(model_path=model_path)
     interpreter.allocate_tensors()
     return interpreter
 
