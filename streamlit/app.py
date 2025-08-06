@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import keras
+from tflite_utils import load_tflite_model, tflite_predict
 import matplotlib.pyplot as plt
 import os
 from datetime import datetime, timedelta
@@ -15,13 +15,13 @@ def load_artifacts():
     # Directory of this script
     base_dir = os.path.dirname(__file__)
     # Artifact paths
-    model_path = os.path.join(base_dir, 'best_model.keras')
+    model_path = os.path.join(base_dir, 'crime_prediction_model.tflite')
     le_path = os.path.join(base_dir, 'label_encoder.pkl')
     scaler_path = os.path.join(base_dir, 'scaler.pkl')
     imputer_path = os.path.join(base_dir, 'imputer.pkl')
     ohe_path = os.path.join(base_dir, 'ohe_columns.pkl')
-    # Load model and preprocessing artifacts
-    model = keras.models.load_model(model_path)
+    # Load TFLite model and preprocessing artifacts
+    model = load_tflite_model(model_path)
     le = joblib.load(le_path)
     scaler = joblib.load(scaler_path)
     imputer = joblib.load(imputer_path)
@@ -63,19 +63,36 @@ def preprocess_input(raw_input, imputer, scaler, ohe_columns):
     # Extract only the original environmental features before scaling
     X_e_raw = X_imp[:, s_dim + t_dim : s_dim + t_dim + env_dim]
     X_e = scaler.transform(X_e_raw)
-    return [X_s, X_t, X_e]
+    return [X_t, X_s, X_e]
 
 def predict_crime(raw_input, model, le, scaler, imputer, ohe_columns, top_k=5):
     inputs = preprocess_input(raw_input, imputer, scaler, ohe_columns)
-    proba = model.predict(inputs, verbose=0)[0]
+    # TFLite expects batch dimension
+    inputs = [arr.astype(np.float32) for arr in inputs]
+    for i in range(len(inputs)):
+        if len(inputs[i].shape) == 1:
+            inputs[i] = np.expand_dims(inputs[i], axis=0)
+
+    # Debug: print model and input shapes
+    input_details = model.get_input_details()
+    print('TFLite model expects input shapes:')
+    for d in input_details:
+        print(f"  {d['name']}: {d['shape']}")
+    print('Actual input shapes:')
+    for i, arr in enumerate(inputs):
+        print(f"  input[{i}]: {arr.shape}")
+
+    proba = tflite_predict(model, inputs)[0]
     idx = np.argsort(proba)[::-1][:top_k]
     return [(le.inverse_transform([i])[0], float(proba[i])) for i in idx]
 
 @st.cache_data
 def load_data():
     try:
-        # Load combined data from project root
-        return pd.read_csv('combined_data.csv')
+        # Load combined data from the streamlit directory
+        base_dir = os.path.dirname(__file__)
+        data_path = os.path.join(base_dir, 'combined_data.csv')
+        return pd.read_csv(data_path)
     except Exception as e:
         st.error(f"Error loading data: {e}")
         return None
@@ -205,39 +222,45 @@ if view == "🔮 Predict Crime":
             st.session_state['preds'][city] = predict_crime(raw, model, le, scaler, imputer, ohe_columns, top_k=10)
     # Display cached predictions with adjustable top_k
     if 'preds' in st.session_state:
-        tabs = st.tabs(selected_cities)
-        for city, tab in zip(selected_cities, tabs):
-            with tab:
+        if selected_cities:
+            tabs = st.tabs(selected_cities)
+            for city, tab in zip(selected_cities, tabs):
                 city_preds = st.session_state['preds'].get(city, [])
-                max_k = len(city_preds)
-                n_top = st.slider(
-                    "Number of top crime types to display",
-                    min_value=1,
-                    max_value=max_k,
-                    value=min(5, max_k),
-                    key=f"n_top_{city}"
-                )
-                preds = city_preds[:n_top]
-                results_df = pd.DataFrame(preds, columns=['Crime Type', 'Probability'])
-                st.markdown("---")
-                st.header(f"🎯 Predictions for {city}")
-                for idx, (crime, prob) in enumerate(preds, start=1):
-                    st.write(f"**{idx}.** {crime}: {prob:.2%}")
-                fig = px.bar(
-                    results_df, x='Probability', y='Crime Type', orientation='h',
-                    color='Probability', color_continuous_scale='viridis', text='Probability'
-                )
-                fig.update_traces(texttemplate='%{text:.1%}', textposition='outside')
-                fig.update_layout(
-                    xaxis_title='Probability',
-                    yaxis={'categoryorder':'total ascending'}, height=400, showlegend=False
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                with st.expander("Show full predictions"):
-                    st.dataframe(
-                        results_df.assign(Probability=lambda df: df['Probability'].map(lambda x: f"{x:.2%}")),
-                        use_container_width=True
-                    )
+                with tab:
+                    max_k = len(city_preds)
+                    if max_k > 0:
+                        n_top = st.slider(
+                            "Number of top crime types to display",
+                            min_value=1,
+                            max_value=max_k,
+                            value=min(5, max_k),
+                            key=f"n_top_{city}"
+                        )
+                        preds = city_preds[:n_top]
+                        results_df = pd.DataFrame(preds, columns=['Crime Type', 'Probability'])
+                        st.markdown("---")
+                        st.header(f"🎯 Predictions for {city}")
+                        for idx, (crime, prob) in enumerate(preds, start=1):
+                            st.write(f"**{idx}.** {crime}: {prob:.2%}")
+                        fig = px.bar(
+                            results_df, x='Probability', y='Crime Type', orientation='h',
+                            color='Probability', color_continuous_scale='viridis', text='Probability'
+                        )
+                        fig.update_traces(texttemplate='%{text:.1%}', textposition='outside')
+                        fig.update_layout(
+                            xaxis_title='Probability',
+                            yaxis={'categoryorder':'total ascending'}, height=400, showlegend=False
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        with st.expander("Show full predictions"):
+                            st.dataframe(
+                                results_df.assign(Probability=lambda df: df['Probability'].map(lambda x: f"{x:.2%}")),
+                                use_container_width=True
+                            )
+                    else:
+                        st.info("No predictions available for this city. Please check your input or try another city.")
+        else:
+            st.info("Please select at least one city to view predictions.")
 
 elif view == "📊 Historical Analysis":
     st.header("Historical Crime Analysis")
