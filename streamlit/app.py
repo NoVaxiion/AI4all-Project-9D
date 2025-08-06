@@ -20,19 +20,12 @@ def load_artifacts():
     scaler_path = os.path.join(base_dir, 'scaler.pkl')
     imputer_path = os.path.join(base_dir, 'imputer.pkl')
     ohe_path = os.path.join(base_dir, 'ohe_columns.pkl')
-    try:
-        model = keras.models.load_model(model_path)
-    except Exception as e:
-        st.error(f"Error loading Keras model: {e}")
-        return None, None, None, None, None
-    try:
-        le = joblib.load(le_path)
-        scaler = joblib.load(scaler_path)
-        imputer = joblib.load(imputer_path)
-        ohe_columns = joblib.load(ohe_path)
-    except Exception as e:
-        st.error(f"Error loading preprocessing artifacts: {e}")
-        return None, None, None, None, None
+    # Load model and preprocessing artifacts
+    model = keras.models.load_model(model_path)
+    le = joblib.load(le_path)
+    scaler = joblib.load(scaler_path)
+    imputer = joblib.load(imputer_path)
+    ohe_columns = joblib.load(ohe_path)
     return model, le, scaler, imputer, ohe_columns
 
 def preprocess_input(raw_input, imputer, scaler, ohe_columns):
@@ -81,10 +74,8 @@ def predict_crime(raw_input, model, le, scaler, imputer, ohe_columns, top_k=5):
 @st.cache_data
 def load_data():
     try:
-        # Load combined data from the streamlit directory
-        base_dir = os.path.dirname(__file__)
-        data_path = os.path.join(base_dir, 'combined_data.csv')
-        return pd.read_csv(data_path)
+        # Load combined data from project root
+        return pd.read_csv('combined_data.csv')
     except Exception as e:
         st.error(f"Error loading data: {e}")
         return None
