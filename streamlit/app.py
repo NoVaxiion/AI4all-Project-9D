@@ -6,6 +6,8 @@ import pickle
 from datetime import datetime, timedelta
 import plotly.express as px
 from tflite_utils import load_tflite_model, tflite_predict
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
 
 ## Helpers for model inference and data loading
 @st.cache_resource
@@ -17,10 +19,6 @@ def load_artifacts():
     
     # Load TFLite model
     model = load_tflite_model(model_path)
-    
-    # Create preprocessing artifacts on-the-fly to avoid numpy compatibility issues
-    from sklearn.preprocessing import LabelEncoder, StandardScaler
-    from sklearn.impute import SimpleImputer
     
     # Load data to create preprocessors
     data_path = os.path.join(base_dir, 'combined_data.csv')
