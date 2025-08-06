@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-from tflite_utils import load_tflite_model, tflite_predict
+import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 from datetime import datetime, timedelta
@@ -15,13 +15,13 @@ def load_artifacts():
     # Directory of this script
     base_dir = os.path.dirname(__file__)
     # Artifact paths
-    model_path = os.path.join(base_dir, 'crime_prediction_model.tflite')
+    model_path = os.path.join(base_dir, 'crime_prediction_model.keras')
     le_path = os.path.join(base_dir, 'label_encoder.pkl')
     scaler_path = os.path.join(base_dir, 'scaler.pkl')
     imputer_path = os.path.join(base_dir, 'imputer.pkl')
     ohe_path = os.path.join(base_dir, 'ohe_columns.pkl')
-    # Load TFLite model and preprocessing artifacts
-    model = load_tflite_model(model_path)
+    # Load Keras model and preprocessing artifacts
+    model = tf.keras.models.load_model(model_path)
     le = joblib.load(le_path)
     scaler = joblib.load(scaler_path)
     imputer = joblib.load(imputer_path)
@@ -67,22 +67,18 @@ def preprocess_input(raw_input, imputer, scaler, ohe_columns):
 
 def predict_crime(raw_input, model, le, scaler, imputer, ohe_columns, top_k=5):
     inputs = preprocess_input(raw_input, imputer, scaler, ohe_columns)
-    # TFLite expects batch dimension
+    # Keras expects inputs as a list in the correct order: [X_t, X_s, X_e]
     inputs = [arr.astype(np.float32) for arr in inputs]
     for i in range(len(inputs)):
         if len(inputs[i].shape) == 1:
             inputs[i] = np.expand_dims(inputs[i], axis=0)
 
-    # Debug: print model and input shapes
-    input_details = model.get_input_details()
-    print('TFLite model expects input shapes:')
-    for d in input_details:
-        print(f"  {d['name']}: {d['shape']}")
-    print('Actual input shapes:')
+    # Debug: print input shapes
+    print('Model input shapes:')
     for i, arr in enumerate(inputs):
         print(f"  input[{i}]: {arr.shape}")
 
-    proba = tflite_predict(model, inputs)[0]
+    proba = model.predict(inputs)[0]
     idx = np.argsort(proba)[::-1][:top_k]
     return [(le.inverse_transform([i])[0], float(proba[i])) for i in idx]
 
