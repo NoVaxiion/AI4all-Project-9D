@@ -78,9 +78,10 @@ def load_artifacts():
     numerical_cols = ['year', 'month', 'day', 'hour', 'dayofweek', 'population', 'crime_rate_per_1000_people']
     scaler.fit(df[numerical_cols])
     
-    # Create SimpleImputer for missing values
+    # Create SimpleImputer for missing values (only for environmental features)
     imputer = SimpleImputer(strategy='median')
-    imputer.fit(df[numerical_cols])
+    env_features = ['population', 'crime_rate_per_1000_people']
+    imputer.fit(df[env_features])
     
     # Create list of one-hot encoded columns (based on your data structure)
     cities = df['city'].unique()[:20]  # Top 20 cities
@@ -103,31 +104,26 @@ def preprocess_input(raw_input, imputer, scaler, ohe_columns):
     df_temp['dayofweek_sin'] = np.sin(2*np.pi*df_temp['dayofweek']/7)
     df_temp['dayofweek_cos'] = np.cos(2*np.pi*df_temp['dayofweek']/7)
     df_temp = df_temp.drop(['hour','dayofweek'], axis=1)
+    
     # Spatial one-hot
     df_spat = pd.get_dummies(df_raw[['city','location_area']])
     df_spat = df_spat.reindex(columns=ohe_columns, fill_value=0)
-    # Environmental
-    df_env = df_raw[['population','crime_rate_per_1000_people']].values
+    
+    # Environmental features - apply imputer only to these
+    df_env = df_raw[['population','crime_rate_per_1000_people']].copy()
+    df_env_imputed = imputer.transform(df_env)
+    
     # Combine into feature matrix
-    X_full = np.hstack([df_spat.values, df_temp.values, df_env])
-    # Pad to match imputer's expected number of features
-    try:
-        n_expected = imputer.n_features_in_
-    except AttributeError:
-        n_expected = imputer.n_input_features_
-    if X_full.shape[1] < n_expected:
-        pad = np.zeros((X_full.shape[0], n_expected - X_full.shape[1]))
-        X_full = np.hstack([X_full, pad])
-    # Apply imputer
-    X_imp = imputer.transform(X_full)
+    X_full = np.hstack([df_spat.values, df_temp.values, df_env_imputed])
+    
     # Split into three inputs
     s_dim = len(ohe_columns)
     t_dim = df_temp.shape[1]
-    env_dim = df_env.shape[1]
-    X_s = X_imp[:, :s_dim]
-    X_t = X_imp[:, s_dim:s_dim + t_dim]
-    # Extract only the original environmental features before scaling
-    X_e_raw = X_imp[:, s_dim + t_dim : s_dim + t_dim + env_dim]
+    env_dim = df_env_imputed.shape[1]
+    
+    X_s = X_full[:, :s_dim]
+    X_t = X_full[:, s_dim:s_dim + t_dim]
+    X_e_raw = X_full[:, s_dim + t_dim : s_dim + t_dim + env_dim]
     X_e = scaler.transform(X_e_raw)
     return [X_t, X_s, X_e]
 
