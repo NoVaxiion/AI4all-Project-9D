@@ -5,5 +5,5 @@ joblib
 scikit-learn
 matplotlib
 plotly
-keras>=2.13.1,<2.14
-tensorflow-cpu==2.13.1
+keras>=3.0.0,<3.7
+tensorflow-cpu>=2.15.0,<2.16
