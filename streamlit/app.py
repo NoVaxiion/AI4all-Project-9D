@@ -56,19 +56,42 @@ def load_artifacts():
 def load_artifacts():
     # Directory of this script
     base_dir = os.path.dirname(__file__)
-    # Artifact paths
     model_path = os.path.join(base_dir, 'crime_prediction_model.tflite')
-    le_path = os.path.join(base_dir, 'label_encoder.pkl')
-    scaler_path = os.path.join(base_dir, 'scaler.pkl')
-    imputer_path = os.path.join(base_dir, 'imputer.pkl')
-    ohe_path = os.path.join(base_dir, 'ohe_columns.pkl')
     
-    # Load TFLite model and preprocessing artifacts
+    # Load TFLite model
     model = load_tflite_model(model_path)
-    le = joblib.load(le_path)
-    scaler = joblib.load(scaler_path)
-    imputer = joblib.load(imputer_path)
-    ohe_columns = joblib.load(ohe_path)
+    
+    # Create preprocessing artifacts on-the-fly to avoid numpy compatibility issues
+    from sklearn.preprocessing import LabelEncoder, StandardScaler
+    from sklearn.impute import SimpleImputer
+    
+    # Load data to create preprocessors
+    data_path = os.path.join(base_dir, 'combined_data.csv')
+    df = pd.read_csv(data_path)
+    
+    # Create Label Encoder for offense categories
+    le = LabelEncoder()
+    le.fit(df['offense_category_name'].astype(str))
+    
+    # Create StandardScaler for numerical features
+    scaler = StandardScaler()
+    numerical_cols = ['year', 'month', 'day', 'hour', 'dayofweek', 'population', 'crime_rate_per_1000_people']
+    scaler.fit(df[numerical_cols])
+    
+    # Create SimpleImputer for missing values
+    imputer = SimpleImputer(strategy='median')
+    imputer.fit(df[numerical_cols])
+    
+    # Create list of one-hot encoded columns (based on your data structure)
+    cities = df['city'].unique()[:20]  # Top 20 cities
+    locations = df['location_area'].unique()[:30]  # Top 30 location types
+    offenses = df['offense_name'].unique()[:50]  # Top 50 offense types
+    
+    ohe_columns = []
+    ohe_columns.extend([f'city_{city}' for city in cities])
+    ohe_columns.extend([f'location_area_{loc}' for loc in locations])
+    ohe_columns.extend([f'offense_name_{off}' for off in offenses])
+    
     return model, le, scaler, imputer, ohe_columns
 
 def preprocess_input(raw_input, imputer, scaler, ohe_columns):
