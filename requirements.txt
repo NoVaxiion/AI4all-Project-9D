@@ -7,3 +7,4 @@ pandas
 matplotlib
 plotly
 altair<5
+tflite-runtime
