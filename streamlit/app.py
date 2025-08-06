@@ -41,15 +41,11 @@ def load_artifacts():
     imputer = SimpleImputer(strategy='median')
     imputer.fit(df[env_features])
     
-    # Create list of one-hot encoded columns (based on your data structure)
-    cities = df['city'].unique()[:20]  # Top 20 cities
-    locations = df['location_area'].unique()[:30]  # Top 30 location types
-    offenses = df['offense_name'].unique()[:50]  # Top 50 offense types
-    
-    ohe_columns = []
-    ohe_columns.extend([f'city_{city}' for city in cities])
-    ohe_columns.extend([f'location_area_{loc}' for loc in locations])
-    ohe_columns.extend([f'offense_name_{off}' for off in offenses])
+    # Load the exact one-hot encoded columns used during training
+    import pickle
+    ohe_path = os.path.join(base_dir, 'ohe_columns.pkl')
+    with open(ohe_path, 'rb') as f:
+        ohe_columns = pickle.load(f)
     
     return model, le, scaler, imputer, ohe_columns
 
