@@ -52,50 +52,38 @@ def load_artifacts():
     ohe_columns.extend([f'offense_name_{off}' for off in offenses])
     
     return model, le, scaler, imputer, ohe_columns
-@st.cache_resource
-def load_artifacts():
-    # Directory of this script
-    base_dir = os.path.dirname(__file__)
-    model_path = os.path.join(base_dir, 'crime_prediction_model.tflite')
-    
-    # Load TFLite model
-    model = load_tflite_model(model_path)
-    
-    # Create preprocessing artifacts on-the-fly to avoid numpy compatibility issues
-    from sklearn.preprocessing import LabelEncoder, StandardScaler
-    from sklearn.impute import SimpleImputer
-    
-    # Load data to create preprocessors
-    data_path = os.path.join(base_dir, 'combined_data.csv')
-    df = pd.read_csv(data_path)
-    
-    # Create Label Encoder for offense categories
-    le = LabelEncoder()
-    le.fit(df['offense_category_name'].astype(str))
-    
-    # Create StandardScaler for numerical features
-    scaler = StandardScaler()
-    numerical_cols = ['year', 'month', 'day', 'hour', 'dayofweek', 'population', 'crime_rate_per_1000_people']
-    scaler.fit(df[numerical_cols])
-    
-    # Create SimpleImputer for missing values (only for environmental features)
-    imputer = SimpleImputer(strategy='median')
-    env_features = ['population', 'crime_rate_per_1000_people']
-    imputer.fit(df[env_features])
-    
-    # Create list of one-hot encoded columns (based on your data structure)
-    cities = df['city'].unique()[:20]  # Top 20 cities
-    locations = df['location_area'].unique()[:30]  # Top 30 location types
-    offenses = df['offense_name'].unique()[:50]  # Top 50 offense types
-    
-    ohe_columns = []
-    ohe_columns.extend([f'city_{city}' for city in cities])
-    ohe_columns.extend([f'location_area_{loc}' for loc in locations])
-    ohe_columns.extend([f'offense_name_{off}' for off in offenses])
-    
-    return model, le, scaler, imputer, ohe_columns
 
 def preprocess_input(raw_input, imputer, scaler, ohe_columns):
+    df_raw = pd.DataFrame([raw_input])
+    # Temporal transforms: include date components and cyclical time
+    df_temp = df_raw[['year','month','day','hour','dayofweek']].copy()
+    df_temp['hour_sin'] = np.sin(2*np.pi*df_temp['hour']/24)
+    df_temp['hour_cos'] = np.cos(2*np.pi*df_temp['hour']/24)
+    df_temp['dayofweek_sin'] = np.sin(2*np.pi*df_temp['dayofweek']/7)
+    df_temp['dayofweek_cos'] = np.cos(2*np.pi*df_temp['dayofweek']/7)
+    df_temp = df_temp.drop(['hour','dayofweek'], axis=1)
+    
+    # Spatial one-hot
+    df_spat = pd.get_dummies(df_raw[['city','location_area']])
+    df_spat = df_spat.reindex(columns=ohe_columns, fill_value=0)
+    
+    # Environmental features - apply imputer only to these
+    df_env = df_raw[['population','crime_rate_per_1000_people']].copy()
+    df_env_imputed = imputer.transform(df_env)
+    
+    # Combine into feature matrix
+    X_full = np.hstack([df_spat.values, df_temp.values, df_env_imputed])
+    
+    # Split into three inputs
+    s_dim = len(ohe_columns)
+    t_dim = df_temp.shape[1]
+    env_dim = df_env_imputed.shape[1]
+    
+    X_s = X_full[:, :s_dim]
+    X_t = X_full[:, s_dim:s_dim + t_dim]
+    X_e_raw = X_full[:, s_dim + t_dim : s_dim + t_dim + env_dim]
+    X_e = scaler.transform(X_e_raw)
+    return [X_t, X_s, X_e]
     df_raw = pd.DataFrame([raw_input])
     # Temporal transforms: include date components and cyclical time
     df_temp = df_raw[['year','month','day','hour','dayofweek']].copy()
