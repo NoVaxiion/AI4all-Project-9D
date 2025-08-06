@@ -67,41 +67,35 @@ def preprocess_input(raw_input, imputer, scaler, ohe_columns):
     return [X_t, X_s, X_e]
 
 def predict_crime(raw_input, model, le, scaler, imputer, ohe_columns, top_k=5):
-    # Use the actual TensorFlow Lite model for predictions
-    try:
-        # Preprocess the input
-        X_inputs = preprocess_input(raw_input, imputer, scaler, ohe_columns)
-        
-        # Make prediction using TFLite model
-        predictions = tflite_predict(model, X_inputs)
-        
-        # Get top-k predictions
-        pred_probs = predictions[0]  # Assuming single sample
-        top_indices = np.argsort(pred_probs)[::-1][:top_k]
-        
-        # Convert indices back to crime type names
-        results = []
-        for idx in top_indices:
-            crime_type = le.inverse_transform([idx])[0]
-            probability = float(pred_probs[idx])
-            results.append((crime_type, probability))
-        
-        # DEBUG: Show model is working with real data
-        st.sidebar.info(f"📊 Max probability: {max(pred_probs):.3f}")
-        st.sidebar.info(f"🎯 Input city: {raw_input.get('city', 'Unknown')}")
-        st.sidebar.info(f"🕐 Input hour: {raw_input.get('hour', 'Unknown')}")
-        
-        return results
-        
-    except Exception as e:
-        st.error(f"Error making prediction: {e}")
-        st.sidebar.error("❌ Model Failed - Using Fallback")
-        # Fallback to dummy predictions if model fails
-        return [
-            ('Model Error - Using Fallback', 0.5),
-            ('Please Check Logs', 0.3),
-            ('Technical Issue', 0.2)
-        ]
+    # Use the actual TensorFlow Lite model for predictions - NO FALLBACKS
+    if model is None:
+        st.error("❌ TensorFlow model not loaded. Cannot make predictions.")
+        st.stop()
+    
+    # Preprocess the input
+    X_inputs = preprocess_input(raw_input, imputer, scaler, ohe_columns)
+    
+    # Make prediction using TFLite model
+    predictions = tflite_predict(model, X_inputs)
+    
+    # Get top-k predictions
+    pred_probs = predictions[0]  # Assuming single sample
+    top_indices = np.argsort(pred_probs)[::-1][:top_k]
+    
+    # Convert indices back to crime type names
+    results = []
+    for idx in top_indices:
+        crime_type = le.inverse_transform([idx])[0]
+        probability = float(pred_probs[idx])
+        results.append((crime_type, probability))
+    
+    # Show model is working with REAL data
+    st.sidebar.info(f"🧠 Model processed {len(pred_probs)} crime types")
+    st.sidebar.info(f"📊 Max probability: {max(pred_probs):.3f}")
+    st.sidebar.info(f"🎯 Input city: {raw_input.get('city', 'Unknown')}")
+    st.sidebar.info(f"🕐 Input hour: {raw_input.get('hour', 'Unknown')}")
+    
+    return results
 
 @st.cache_data
 def load_data():

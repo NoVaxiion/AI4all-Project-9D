@@ -6,3 +6,4 @@ pandas
 matplotlib
 plotly
 altair<5
+tensorflow==2.13.0
