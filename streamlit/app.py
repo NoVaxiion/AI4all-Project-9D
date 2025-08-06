@@ -20,12 +20,19 @@ def load_artifacts():
     scaler_path = os.path.join(base_dir, 'scaler.pkl')
     imputer_path = os.path.join(base_dir, 'imputer.pkl')
     ohe_path = os.path.join(base_dir, 'ohe_columns.pkl')
-    # Load model and preprocessing artifacts
-    model = keras.models.load_model(model_path)
-    le = joblib.load(le_path)
-    scaler = joblib.load(scaler_path)
-    imputer = joblib.load(imputer_path)
-    ohe_columns = joblib.load(ohe_path)
+    try:
+        model = keras.models.load_model(model_path)
+    except Exception as e:
+        st.error(f"Error loading Keras model: {e}")
+        return None, None, None, None, None
+    try:
+        le = joblib.load(le_path)
+        scaler = joblib.load(scaler_path)
+        imputer = joblib.load(imputer_path)
+        ohe_columns = joblib.load(ohe_path)
+    except Exception as e:
+        st.error(f"Error loading preprocessing artifacts: {e}")
+        return None, None, None, None, None
     return model, le, scaler, imputer, ohe_columns
 
 def preprocess_input(raw_input, imputer, scaler, ohe_columns):
