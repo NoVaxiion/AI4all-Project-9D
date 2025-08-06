@@ -32,14 +32,14 @@ def load_artifacts():
     le = LabelEncoder()
     le.fit(df['offense_category_name'].astype(str))
     
-    # Create StandardScaler for numerical features
+    # Create StandardScaler for environmental features only
     scaler = StandardScaler()
-    numerical_cols = ['year', 'month', 'day', 'hour', 'dayofweek', 'population', 'crime_rate_per_1000_people']
-    scaler.fit(df[numerical_cols])
+    env_features = ['population', 'crime_rate_per_1000_people']
+    scaler.fit(df[env_features])
     
-    # Create SimpleImputer for missing values
+    # Create SimpleImputer for missing values (only for environmental features)
     imputer = SimpleImputer(strategy='median')
-    imputer.fit(df[numerical_cols])
+    imputer.fit(df[env_features])
     
     # Create list of one-hot encoded columns (based on your data structure)
     cities = df['city'].unique()[:20]  # Top 20 cities
@@ -54,36 +54,6 @@ def load_artifacts():
     return model, le, scaler, imputer, ohe_columns
 
 def preprocess_input(raw_input, imputer, scaler, ohe_columns):
-    df_raw = pd.DataFrame([raw_input])
-    # Temporal transforms: include date components and cyclical time
-    df_temp = df_raw[['year','month','day','hour','dayofweek']].copy()
-    df_temp['hour_sin'] = np.sin(2*np.pi*df_temp['hour']/24)
-    df_temp['hour_cos'] = np.cos(2*np.pi*df_temp['hour']/24)
-    df_temp['dayofweek_sin'] = np.sin(2*np.pi*df_temp['dayofweek']/7)
-    df_temp['dayofweek_cos'] = np.cos(2*np.pi*df_temp['dayofweek']/7)
-    df_temp = df_temp.drop(['hour','dayofweek'], axis=1)
-    
-    # Spatial one-hot
-    df_spat = pd.get_dummies(df_raw[['city','location_area']])
-    df_spat = df_spat.reindex(columns=ohe_columns, fill_value=0)
-    
-    # Environmental features - apply imputer only to these
-    df_env = df_raw[['population','crime_rate_per_1000_people']].copy()
-    df_env_imputed = imputer.transform(df_env)
-    
-    # Combine into feature matrix
-    X_full = np.hstack([df_spat.values, df_temp.values, df_env_imputed])
-    
-    # Split into three inputs
-    s_dim = len(ohe_columns)
-    t_dim = df_temp.shape[1]
-    env_dim = df_env_imputed.shape[1]
-    
-    X_s = X_full[:, :s_dim]
-    X_t = X_full[:, s_dim:s_dim + t_dim]
-    X_e_raw = X_full[:, s_dim + t_dim : s_dim + t_dim + env_dim]
-    X_e = scaler.transform(X_e_raw)
-    return [X_t, X_s, X_e]
     df_raw = pd.DataFrame([raw_input])
     # Temporal transforms: include date components and cyclical time
     df_temp = df_raw[['year','month','day','hour','dayofweek']].copy()
